@@ -15,7 +15,11 @@ A simple Python application to download YouTube videos with a graphical user int
 - `tkinter` (included with standard Python installations)
 
 ## Installation
-1. Clone or download this repository to your local machine.
+1. Clone the repository to your local machine:
+   ```bash
+   git clone https://github.com/elif-absrd/Youtube_video_downloader.git
+   ```
+   Alternatively, you can download the repository as a ZIP file and extract it.
 2. Ensure Python 3.6+ is installed. Verify with:
    ```bash
    python --version
@@ -31,7 +35,7 @@ A simple Python application to download YouTube videos with a graphical user int
    ```bash
    python downloader.py
    ```
-2. Enter a valid YouTube video URL
+2. Enter a valid YouTube video URL (e.g., `https://www.youtube.com/watch?v=2lAe1cqCOXo`).
 3. Click **Load Video** to fetch available resolutions.
 4. Select a resolution from the dropdown menu.
 5. Click **Download**, choose a save location, and wait for the download to complete.
