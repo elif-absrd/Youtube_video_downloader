@@ -9,30 +9,53 @@ root = Tk()
 root.title("YouTube Downloader")
 root.geometry("600x400")
 root.resizable(False, False)
+root.configure(bg="#1E1E1E")  # Dark background
+
+# Apply custom styling
+style = ttk.Style()
+style.theme_use('clam')
+style.configure("TCombobox", fieldbackground="#2E2E2E", background="#2E2E2E", foreground="#FFFFFF", selectbackground="#3E3E3E", selectforeground="#FFFFFF")
+style.configure("TButton", background="#3E3E3E", foreground="#FFFFFF", font=("Arial", 10))
+style.map("TButton", background=[('active', '#4E4E4E')])
 
 # Global variable to store video info
 video_info = None
 
-# Create and pack the URL entry field
-url_label = Label(root, text="Enter YouTube URL:", font="Arial 12 bold")
-url_label.pack(pady=10)
-url_entry = Entry(root, width=50, font="Arial 10")
-url_entry.pack(pady=5)
+# Create main frame
+main_frame = Frame(root, bg="#1E1E1E")
+main_frame.pack(pady=20, padx=20, fill="both", expand=True)
 
-# Create and pack the "Load Video" button
-load_button = Button(root, text="Load Video", font="Arial 12", command=lambda: load_video())
-load_button.pack(pady=10)
+# URL input and Load button row
+url_frame = Frame(main_frame, bg="#1E1E1E")
+url_frame.pack(fill="x", pady=10)
 
-# Create and pack the resolution selection Combobox
-resolution_label = Label(root, text="Select Resolution:", font="Arial 12 bold")
-resolution_label.pack(pady=10)
+url_label = Label(url_frame, text="YouTube URL:", font=("Arial", 12, "bold"), fg="#FFFFFF", bg="#1E1E1E")
+url_label.pack(side=LEFT, padx=(0, 10))
+
+url_entry = Entry(url_frame, width=40, font=("Arial", 10), bg="#2E2E2E", fg="#FFFFFF", insertbackground="#FFFFFF", borderwidth=1, relief="solid")
+url_entry.pack(side=LEFT, padx=(0, 10), ipady=5)
+
+load_button = Button(url_frame, text="Load Video", font=("Arial", 10, "bold"), bg="#3E3E3E", fg="#FFFFFF", activebackground="#4E4E4E", relief="flat", command=lambda: load_video())
+load_button.pack(side=LEFT)
+
+# Resolution selection
+resolution_frame = Frame(main_frame, bg="#1E1E1E")
+resolution_frame.pack(pady=20)
+
+resolution_label = Label(resolution_frame, text="Select Resolution:", font=("Arial", 12, "bold"), fg="#FFFFFF", bg="#1E1E1E")
+resolution_label.pack()
+
 resolution_var = StringVar()
-resolution_combobox = ttk.Combobox(root, textvariable=resolution_var, state="readonly", width=20)
-resolution_combobox.pack(pady=5)
+resolution_combobox = ttk.Combobox(resolution_frame, textvariable=resolution_var, state="readonly", width=15, font=("Arial", 10))
+resolution_combobox.pack(pady=10)
 
-# Create and pack the "Download" button, initially disabled
-download_button = Button(root, text="Download", font="Arial 12", command=lambda: download_video(), state=DISABLED)
-download_button.pack(pady=10)
+# Download button
+download_button = Button(main_frame, text="Download", font=("Arial", 12, "bold"), bg="#3E3E3E", fg="#FFFFFF", activebackground="#4E4E4E", relief="flat", command=lambda: download_video(), state=DISABLED, width=15)
+download_button.pack(pady=20)
+
+# Status label
+status_label = Label(main_frame, text="", font=("Arial", 10), fg="#BBBBBB", bg="#1E1E1E")
+status_label.pack(pady=10)
 
 # Function to load video details using yt-dlp
 def load_video():
@@ -42,6 +65,8 @@ def load_video():
         messagebox.showerror("Error", "Please enter a YouTube URL")
         return
     try:
+        status_label.config(text="Loading video details...")
+        load_button.config(state=DISABLED)
         # Clean the URL by removing query parameters after the video ID
         base_url = url.split('?')[0]
         if 'youtu.be' in base_url:
@@ -58,9 +83,6 @@ def load_video():
             clean_url = f"https://www.youtube.com/watch?v={video_id}"
         else:
             raise ValueError("Unsupported URL format: Must be a youtu.be or youtube.com/watch URL")
-
-        print(f"Attempting to load video with URL: {clean_url}")
-        load_button.config(state=DISABLED)
 
         # Use yt-dlp to fetch video info
         ydl_opts = {
@@ -87,16 +109,20 @@ def load_video():
         if resolutions:
             resolution_var.set(resolutions[0])
             download_button.config(state=NORMAL)
+            status_label.config(text="Video loaded successfully")
         else:
             messagebox.showerror("Error", "No video streams available")
+            status_label.config(text="")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to load video: {str(e)}")
+        status_label.config(text="")
     finally:
         load_button.config(state=NORMAL)
 
 # Function to perform the download in a separate thread
 def perform_download(resolution, save_path):
     try:
+        status_label.config(text=f"Downloading {resolution} video...")
         # Configure yt-dlp options for downloading
         ydl_opts = {
             'format': f'bestvideo[height<={resolution[:-1]}]+bestaudio/best[height<={resolution[:-1]}]',  # Select video and audio
@@ -106,8 +132,10 @@ def perform_download(resolution, save_path):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_info['webpage_url']])
         root.after(0, lambda: messagebox.showinfo("Success", "Download completed"))
+        root.after(0, lambda: status_label.config(text="Download completed"))
     except Exception as e:
         root.after(0, lambda: messagebox.showerror("Error", f"Download failed: {str(e)}"))
+        root.after(0, lambda: status_label.config(text=""))
     finally:
         root.after(0, lambda: download_button.config(text="Download", state=NORMAL))
 
