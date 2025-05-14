@@ -20,6 +20,7 @@ style.theme_use('clam')
 style.configure("TCombobox", fieldbackground="#2E2E2E", background="#2E2E2E", foreground="#FFFFFF", selectbackground="#3E3E3E", selectforeground="#FFFFFF", font=("Arial", 10))
 style.configure("TButton", background="#3E3E3E", foreground="#FFFFFF", font=("Arial", 10, "bold"))
 style.map("TButton", background=[('active', '#4E4E4E')])
+style.configure("Horizontal.TProgressbar", background="#4CAF50", troughcolor="#2E2E2E", bordercolor="#1E1E1E")
 
 # Global variables
 video_info = None
@@ -50,9 +51,7 @@ video_title = Label(info_frame, text="", font=("Arial", 11, "bold"), fg="#FFFFFF
 video_title.pack(anchor="w", pady=5)
 
 # Format and Resolution selection
-options_frame = Frame(main_frame,
-
- bg="#1E1E1E")
+options_frame = Frame(main_frame, bg="#1E1E1E")
 options_frame.pack(pady=10)
 
 # Format selection
@@ -71,12 +70,15 @@ resolution_var = StringVar()
 resolution_combobox = ttk.Combobox(options_frame, textvariable=resolution_var, state="readonly", width=15, font=("Arial", 10))
 resolution_combobox.grid(row=0, column=3, padx=10, pady=5)
 
-# Status label
+# Status label and progress bar
 status_frame = Frame(main_frame, bg="#1E1E1E")
 status_frame.pack(fill="x", pady=20)
 
 status_label = Label(status_frame, text="", font=("Arial", 10), fg="#BBBBBB", bg="#1E1E1E")
 status_label.pack(pady=5)
+
+progress_bar = ttk.Progressbar(status_frame, orient=HORIZONTAL, length=400, mode='determinate')
+progress_bar.pack(pady=5)
 
 # Download and Retry buttons
 button_frame = Frame(main_frame, bg="#1E1E1E")
@@ -117,6 +119,7 @@ def load_video():
         load_button.config(state=DISABLED)
         download_button.config(state=DISABLED)
         retry_button.config(state=DISABLED)
+        progress_bar['value'] = 0  # Reset progress bar
         # Clean the URL
         base_url = url.split('?')[0]
         if 'youtu.be' in base_url:
@@ -177,12 +180,25 @@ def load_video():
     finally:
         load_button.config(state=NORMAL)
 
+# Progress hook for yt-dlp
+def progress_hook(d):
+    if d['status'] == 'downloading':
+        percent = d.get('_percent_str', '0%').replace('%', '')
+        try:
+            percent_float = float(percent)
+            root.after(0, lambda: progress_bar.config(value=percent_float))
+        except ValueError:
+            pass
+    elif d['status'] == 'finished':
+        root.after(0, lambda: progress_bar.config(value=100))
+
 # Function to perform the download
 def perform_download(resolution, save_path, format_type):
     try:
         status_label.config(text=f"Downloading {format_type}...")
         ydl_opts = {
             'outtmpl': save_path,
+            'progress_hooks': [progress_hook],
         }
         if format_type == "MP4":
             ydl_opts['format'] = f'bestvideo[height<={resolution[:-1]}]+bestaudio/best[height<={resolution[:-1]}]'
@@ -201,6 +217,7 @@ def perform_download(resolution, save_path, format_type):
         root.after(0, lambda: retry_button.config(state=NORMAL))
     finally:
         root.after(0, lambda: download_button.config(text="Download", state=NORMAL))
+        root.after(0, lambda: progress_bar.config(value=0))
 
 # Function to handle the download process
 def download_video():
@@ -221,6 +238,7 @@ def download_video():
     if save_path:
         download_button.config(text="Downloading...", state=DISABLED)
         retry_button.config(state=DISABLED)
+        progress_bar['value'] = 0  # Reset progress bar
         threading.Thread(target=perform_download, args=(resolution, save_path, format_type), daemon=True).start()
 
 # Start the main loop
