@@ -41,6 +41,11 @@ A simple Python application to download YouTube videos with a graphical user int
 5. Click **Download**, choose a save location, and wait for the download to complete.
 6. Success or error messages will appear upon completion.
 
+## Screenshot
+Here’s a preview of the YouTube Downloader GUI:
+
+![YouTube Downloader GUI Screenshot](https://github.com/elif-absrd/Youtube_video_downloader/raw/main/images/screenshot.png)
+
 ## Example
 - URL: `https://www.youtube.com/watch?v=2lAe1cqCOXo`
 - Resolutions available: 1080p, 720p, 480p, etc.
