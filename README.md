@@ -28,14 +28,13 @@ A simple Python application to download YouTube videos with a graphical user int
    ```bash
    pip install -r requirements.txt
    ```
-   This installs `yt-dlp>=2024.5.10`.
 
 ## Usage
 1. Run the application:
    ```bash
    python downloader.py
    ```
-2. Enter a valid YouTube video URL (e.g., `https://www.youtube.com/watch?v=2lAe1cqCOXo`).
+2. Enter a valid YouTube video URL
 3. Click **Load Video** to fetch available resolutions.
 4. Select a resolution from the dropdown menu.
 5. Click **Download**, choose a save location, and wait for the download to complete.
@@ -44,12 +43,9 @@ A simple Python application to download YouTube videos with a graphical user int
 ## Screenshot
 Here’s a preview of the YouTube Downloader GUI:
 
-![YouTube Downloader GUI Screenshot](https://github.com/elif-absrd/Youtube_video_downloader/raw/main/images/screenshot.png)
+![YouTube Downloader GUI Screenshot](https://github.com/elif-absrd/Youtube_video_downloader/raw/main/screenshot.png)
 
-## Example
-- URL: `https://www.youtube.com/watch?v=2lAe1cqCOXo`
-- Resolutions available: 1080p, 720p, 480p, etc.
-- Save as: `video_title.mp4`
+
 
 ## Limitations
 - **Performance**: Large videos may take time to download. No progress bar is included in this version.
@@ -63,14 +59,7 @@ Here’s a preview of the YouTube Downloader GUI:
 - **Invalid URL Error**: Ensure the URL is correct and accessible.
 - **No Resolutions Available**: The video may not have downloadable streams, or `yt-dlp` may need updating.
 - **Download Fails**: Check your internet connection or try a different resolution.
-- **Update yt-dlp**: If errors occur, update `yt-dlp`:
+- **Update**: If errors occur, update requirments:
   ```bash
-  pip install --upgrade yt-dlp
+  pip install --upgrade flask flask-cors yt-dlp
   ```
-
-## Contributing
-Feel free to fork this repository and submit pull requests for improvements, such as adding a progress bar or additional format options.
-
-## Acknowledgments
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube video downloading.
-- [tkinter](https://docs.python.org/3/library/tkinter.html) for the GUI framework.
