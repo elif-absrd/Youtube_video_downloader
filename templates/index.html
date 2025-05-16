@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6">YouTube Downloader</h1>
+
+        <!-- URL Input and Load Button -->
+        <div class="mb-4">
+            <label for="url" class="block text-sm font-medium mb-2">YouTube URL</label>
+            <div class="flex space-x-2">
+                <input type="text" id="url" class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter YouTube URL">
+                <button id="load-btn" class="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center space-x-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span>Load</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Video Info -->
+        <div id="video-info" class="hidden mb-4">
+            <div class="flex items-center space-x-3">
+                <img id="thumbnail" src="" alt="Thumbnail" class="w-24 h-16 rounded-lg">
+                <p id="title" class="text-lg font-semibold"></p>
+            </div>
+        </div>
+
+        <!-- Format and Resolution Selection -->
+        <div id="options" class="hidden mb-4">
+            <div class="flex space-x-4">
+                <div class="flex-1">
+                    <label for="format" class="block text-sm font-medium mb-2">Format</label>
+                    <select id="format" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="MP4">MP4</option>
+                        <option value="MP3">MP3</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label for="resolution" class="block text-sm font-medium mb-2">Resolution</label>
+                    <select id="resolution" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status and Progress -->
+        <div id="status" class="mb-4 text-center text-sm text-gray-400"></div>
+        <div id="progress-container" class="hidden mb-4">
+            <div class="w-full bg-gray-700 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Download and Retry Buttons -->
+        <div class="flex justify-center space-x-4">
+            <button id="download-btn" class="p-2 bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center space-x-1 disabled:opacity-50" disabled>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Download</span>
+            </button>
+            <button id="retry-btn" class="p-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition flex items-center space-x-1 disabled:opacity-50" disabled>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-jointype="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9H4m0 0v5m16 0v-5h-.582a8.001 8.001 0 01-15.356-2"></path></svg>
+                <span>Retry</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('url');
+        const loadBtn = document.getElementById('load-btn');
+        const videoInfo = document.getElementById('video-info');
+        const thumbnail = document.getElementById('thumbnail');
+        const title = document.getElementById('title');
+        const options = document.getElementById('options');
+        const formatSelect = document.getElementById('format');
+        const resolutionSelect = document.getElementById('resolution');
+        const status = document.getElementById('status');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const downloadBtn = document.getElementById('download-btn');
+        const retryBtn = document.getElementById('retry-btn');
+
+        let videoData = null;
+
+        // Load video details
+        loadBtn.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('Please enter a YouTube URL');
+                return;
+            }
+
+            loadBtn.disabled = true;
+            downloadBtn.disabled = true;
+            retryBtn.disabled = true;
+            status.textContent = 'Loading video details...';
+            videoInfo.classList.add('hidden');
+            options.classList.add('hidden');
+            progressContainer.classList.add('hidden');
+
+            try {
+                const response = await fetch('/load', {
+                    method: 'POST',
+                    body: JSON.stringify({ url })
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Server responded with ${response.status}: ${text}`);
+                }
+
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                    status.textContent = '';
+                    retryBtn.disabled = false;
+                    return;
+                }
+
+                videoData = data;
+                thumbnail.src = data.thumbnail;
+                title.textContent = data.title;
+                resolutionSelect.innerHTML = data.resolutions.map(res => `<option value="${res}">${res}</option>`).join('');
+                videoInfo.classList.remove('hidden');
+                options.classList.remove('hidden');
+                downloadBtn.disabled = false;
+                status.textContent = 'Video loaded successfully';
+            } catch (err) {
+                alert('Failed to load video: ' + err.message);
+                status.textContent = '';
+                retryBtn.disabled = false;
+            } finally {
+                loadBtn.disabled = false;
+            }
+        });
+
+        // Download video
+        downloadBtn.addEventListener('click', async () => {
+            if (!videoData) {
+                alert('Please load a video first');
+                return;
+            }
+
+            const format = formatSelect.value;
+            const resolution = resolutionSelect.value;
+            if (!resolution && format === 'MP4') {
+                alert('Please select a resolution');
+                return;
+            }
+
+            downloadBtn.disabled = true;
+            retryBtn.disabled = true;
+            status.textContent = `Downloading ${format}...`;
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    body: JSON.stringify({ format, resolution })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let done = false;
+                let accumulatedData = '';
+
+                while (!done) {
+                    const { value, done: readerDone } = await reader.read();
+                    done = readerDone;
+                    if (value) {
+                        accumulatedData += decoder.decode(value, { stream: true });
+                        const lines = accumulatedData.split('\n');
+                        accumulatedData = lines.pop();
+                        for (const line of lines) {
+                            if (line.trim() === '') continue;
+                            const data = JSON.parse(line);
+                            if (data.progress) {
+                                progressBar.style.width = `${data.progress}%`;
+                            } else if (data.status) {
+                                status.textContent = data.status;
+                                if (data.status === 'Download completed' && data.filename) {
+                                    const link = document.createElement('a');
+                                    link.href = `/download_file/${data.filename}`;
+                                    link.download = data.filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    alert('Download completed! File should start downloading.');
+                                }
+                            } else if (data.error) {
+                                alert(data.error);
+                                status.textContent = 'Download failed';
+                                retryBtn.disabled = false;
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                alert('Download failed: ' + err.message);
+                status.textContent = 'Download failed';
+                retryBtn.disabled = false;
+            } finally {
+                downloadBtn.disabled = false;
+                progressContainer.classList.add('hidden');
+            }
+        });
+
+        // Retry button
+        retryBtn.addEventListener('click', () => {
+            loadBtn.click();
+        });
+    </script>
+</body>
+</html>

@@ -1,158 +1,66 @@
 import os
 import threading
-from tkinter import *
-from tkinter import ttk, filedialog, messagebox
+import json
+import time
+from flask import Flask, render_template, request, Response, stream_with_context, send_from_directory, jsonify
+from flask_cors import CORS
 import yt_dlp
-from PIL import Image, ImageTk
-import urllib.request
-import io
+from urllib.parse import urlparse, parse_qs
 
-# Initialize the main window
-root = Tk()
-root.title("YouTube Downloader")
-root.geometry("700x500")
-root.resizable(False, False)
-root.configure(bg="#1E1E1E")  # Dark background
-
-# Apply custom styling
-style = ttk.Style()
-style.theme_use('clam')
-style.configure("TCombobox", fieldbackground="#2E2E2E", background="#2E2E2E", foreground="#FFFFFF", selectbackground="#3E3E3E", selectforeground="#FFFFFF", font=("Arial", 10))
-style.configure("TButton", background="#3E3E3E", foreground="#FFFFFF", font=("Arial", 10, "bold"))
-style.map("TButton", background=[('active', '#4E4E4E')])
-style.configure("Horizontal.TProgressbar", background="#4CAF50", troughcolor="#2E2E2E", bordercolor="#1E1E1E")
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"], "expose_headers": ["Content-Disposition"]}})
 
 # Global variables
 video_info = None
-thumbnail_label = None
+download_path = os.path.join(os.path.expanduser("~"), "Downloads")
+current_filename = None
 
-# Create main frame
-main_frame = Frame(root, bg="#1E1E1E", bd=2, relief="flat")
-main_frame.pack(pady=20, padx=20, fill="both", expand=True)
+# Function to clean YouTube URL
+def clean_url(url):
+    base_url = url.split('?')[0]
+    if 'youtu.be' in base_url:
+        video_id = base_url.split('/')[-1]
+        if not video_id:
+            raise ValueError("Invalid youtu.be URL: No video ID found")
+        return f"https://www.youtube.com/watch?v={video_id}"
+    elif 'youtube.com/watch' in base_url:
+        query_params = url.split('?')[-1] if '?' in url else ''
+        params = dict(param.split('=') for param in query_params.split('&') if '=' in param)
+        video_id = params.get('v')
+        if not video_id:
+            raise ValueError("Invalid YouTube URL: No video ID found in query parameters")
+        return f"https://www.youtube.com/watch?v={video_id}"
+    else:
+        raise ValueError("Unsupported URL format: Must be a youtu.be or youtube.com/watch URL")
 
-# URL input and Load button row
-url_frame = Frame(main_frame, bg="#1E1E1E")
-url_frame.pack(fill="x", pady=10)
+# Route to render the main page
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-url_label = Label(url_frame, text="YouTube URL:", font=("Arial", 12, "bold"), fg="#FFFFFF", bg="#1E1E1E")
-url_label.pack(side=LEFT, padx=(0, 10))
-
-url_entry = Entry(url_frame, width=50, font=("Arial", 10), bg="#2E2E2E", fg="#FFFFFF", insertbackground="#FFFFFF", borderwidth=1, relief="solid")
-url_entry.pack(side=LEFT, padx=(0, 10), ipady=7)
-
-load_button = Button(url_frame, text="Load Video", font=("Arial", 10, "bold"), bg="#3E3E3E", fg="#FFFFFF", activebackground="#4E4E4E", relief="flat", command=lambda: load_video())
-load_button.pack(side=LEFT)
-
-# Video info and thumbnail frame
-info_frame = Frame(main_frame, bg="#1E1E1E")
-info_frame.pack(fill="x", pady=10)
-
-video_title = Label(info_frame, text="", font=("Arial", 11, "bold"), fg="#FFFFFF", bg="#1E1E1E", wraplength=600)
-video_title.pack(anchor="w", pady=5)
-
-# Format and Resolution selection
-options_frame = Frame(main_frame, bg="#1E1E1E")
-options_frame.pack(pady=10)
-
-# Format selection
-format_label = Label(options_frame, text="Format:", font=("Arial", 12, "bold"), fg="#FFFFFF", bg="#1E1E1E")
-format_label.grid(row=0, column=0, padx=(0, 10), pady=5)
-
-format_var = StringVar(value="MP4")
-format_combobox = ttk.Combobox(options_frame, textvariable=format_var, state="readonly", width=10, values=["MP4", "MP3"], font=("Arial", 10))
-format_combobox.grid(row=0, column=1, padx=10, pady=5)
-
-# Resolution selection
-resolution_label = Label(options_frame, text="Resolution:", font=("Arial", 12, "bold"), fg="#FFFFFF", bg="#1E1E1E")
-resolution_label.grid(row=0, column=2, padx=(20, 10), pady=5)
-
-resolution_var = StringVar()
-resolution_combobox = ttk.Combobox(options_frame, textvariable=resolution_var, state="readonly", width=15, font=("Arial", 10))
-resolution_combobox.grid(row=0, column=3, padx=10, pady=5)
-
-# Status label and progress bar
-status_frame = Frame(main_frame, bg="#1E1E1E")
-status_frame.pack(fill="x", pady=20)
-
-status_label = Label(status_frame, text="", font=("Arial", 10), fg="#BBBBBB", bg="#1E1E1E")
-status_label.pack(pady=5)
-
-progress_bar = ttk.Progressbar(status_frame, orient=HORIZONTAL, length=400, mode='determinate')
-progress_bar.pack(pady=5)
-
-# Download and Retry buttons
-button_frame = Frame(main_frame, bg="#1E1E1E")
-button_frame.pack(pady=20)
-
-download_button = Button(button_frame, text="Download", font=("Arial", 12, "bold"), bg="#4CAF50", fg="#FFFFFF", activebackground="#45A049", relief="flat", command=lambda: download_video(), state=DISABLED, width=15)
-download_button.pack(side=LEFT, padx=10)
-
-retry_button = Button(button_frame, text="Retry", font=("Arial", 12, "bold"), bg="#3E3E3E", fg="#FFFFFF", activebackground="#4E4E4E", relief="flat", command=lambda: load_video(), state=DISABLED, width=15)
-retry_button.pack(side=LEFT, padx=10)
-
-# Function to load and display thumbnail
-def load_thumbnail(url):
-    global thumbnail_label
-    try:
-        with urllib.request.urlopen(url) as u:
-            raw_data = u.read()
-        image = Image.open(io.BytesIO(raw_data))
-        image = image.resize((120, 90), Image.LANCZOS)
-        photo = ImageTk.PhotoImage(image)
-        if thumbnail_label:
-            thumbnail_label.destroy()
-        thumbnail_label = Label(info_frame, image=photo, bg="#1E1E1E")
-        thumbnail_label.image = photo  # Keep a reference
-        thumbnail_label.pack(anchor="w", pady=5)
-    except Exception as e:
-        status_label.config(text=f"Failed to load thumbnail: {str(e)}")
-
-# Function to load video details using yt-dlp
-def load_video():
+# Route to load video details
+@app.route('/load', methods=['POST'])
+def load():
     global video_info
-    url = url_entry.get()
+    data = request.get_json(force=True)
+    url = data.get('url')
     if not url:
-        messagebox.showerror("Error", "Please enter a YouTube URL")
-        return
-    try:
-        status_label.config(text="Loading video details...")
-        load_button.config(state=DISABLED)
-        download_button.config(state=DISABLED)
-        retry_button.config(state=DISABLED)
-        progress_bar['value'] = 0  # Reset progress bar
-        # Clean the URL
-        base_url = url.split('?')[0]
-        if 'youtu.be' in base_url:
-            video_id = base_url.split('/')[-1]
-            if not video_id:
-                raise ValueError("Invalid youtu.be URL: No video ID found")
-            clean_url = f"https://www.youtube.com/watch?v={video_id}"
-        elif 'youtube.com/watch' in base_url:
-            query_params = url.split('?')[-1] if '?' in url else ''
-            params = dict(param.split('=') for param in query_params.split('&') if '=' in param)
-            video_id = params.get('v')
-            if not video_id:
-                raise ValueError("Invalid YouTube URL: No video ID found in query parameters")
-            clean_url = f"https://www.youtube.com/watch?v={video_id}"
-        else:
-            raise ValueError("Unsupported URL format: Must be a youtu.be or youtube.com/watch URL")
+        return jsonify({'error': 'Please enter a YouTube URL'}), 400
 
-        # Fetch video info
+    try:
+        clean_url_val = clean_url(url)
         ydl_opts = {
             'quiet': True,
             'format': 'bestvideo',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'socket_timeout': 30,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(clean_url, download=False)
+            info = ydl.extract_info(clean_url_val, download=False)
+            if not info:
+                raise ValueError("No video info returned by yt-dlp")
             video_info = info
 
-        # Display title and thumbnail
-        video_title.config(text=info.get('title', 'Unknown Title'))
-        thumbnail_url = info.get('thumbnail')
-        if thumbnail_url:
-            threading.Thread(target=load_thumbnail, args=(thumbnail_url,), daemon=True).start()
-
-        # Extract resolutions
         formats = info.get('formats', [])
         resolutions = []
         for fmt in formats:
@@ -162,23 +70,15 @@ def load_video():
                 if resolution not in resolutions:
                     resolutions.append(resolution)
 
-        # Sort resolutions
         resolutions.sort(key=lambda x: int(x[:-1]), reverse=True)
-        resolution_combobox['values'] = resolutions
-        if resolutions:
-            resolution_var.set(resolutions[0])
-            download_button.config(state=NORMAL)
-            status_label.config(text="Video loaded successfully")
-        else:
-            messagebox.showerror("Error", "No video streams available")
-            status_label.config(text="")
-            retry_button.config(state=NORMAL)
+        response_data = {
+            'title': info.get('title', 'Unknown Title'),
+            'thumbnail': info.get('thumbnail', ''),
+            'resolutions': resolutions
+        }
+        return jsonify(response_data)
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load video: {str(e)}")
-        status_label.config(text="")
-        retry_button.config(state=NORMAL)
-    finally:
-        load_button.config(state=NORMAL)
+        return jsonify({'error': f'Failed to load video: {str(e)}'}), 500
 
 # Progress hook for yt-dlp
 def progress_hook(d):
@@ -186,16 +86,27 @@ def progress_hook(d):
         percent = d.get('_percent_str', '0%').replace('%', '')
         try:
             percent_float = float(percent)
-            root.after(0, lambda: progress_bar.config(value=percent_float))
+            yield json.dumps({'progress': percent_float}) + '\n'
         except ValueError:
             pass
     elif d['status'] == 'finished':
-        root.after(0, lambda: progress_bar.config(value=100))
+        yield json.dumps({'status': 'Download completed', 'filename': current_filename}) + '\n'
 
-# Function to perform the download
-def perform_download(resolution, save_path, format_type):
+# Generator for download progress
+def download_generator(video_info, format_type, resolution):
+    global current_filename
+    video_title = "".join(c for c in video_info.get('title', 'video') if c.isalnum() or c in (' ', '_', '-')).rstrip()
+    # Remove additional invalid characters for Windows
+    invalid_chars = '<>:"/\\|?*'
+    for char in invalid_chars:
+        video_title = video_title.replace(char, '')
+    current_filename = f"{video_title}_{int(time.time())}.{format_type.lower()}"
+    save_path = os.path.join(download_path, current_filename)
+    
+    os.makedirs(download_path, exist_ok=True)
+    app.logger.info(f"Saving file to: {save_path}")
+
     try:
-        status_label.config(text=f"Downloading {format_type}...")
         ydl_opts = {
             'outtmpl': save_path,
             'progress_hooks': [progress_hook],
@@ -203,43 +114,84 @@ def perform_download(resolution, save_path, format_type):
         if format_type == "MP4":
             ydl_opts['format'] = f'bestvideo[height<={resolution[:-1]}]+bestaudio/best[height<={resolution[:-1]}]'
             ydl_opts['merge_output_format'] = 'mp4'
-        else:  # MP3
+        else:
             ydl_opts['format'] = 'bestaudio'
             ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}]
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_info['webpage_url']])
-        root.after(0, lambda: messagebox.showinfo("Success", "Download completed"))
-        root.after(0, lambda: status_label.config(text="Download completed"))
+            def download_task():
+                ydl.download([video_info['webpage_url']])
+
+            thread = threading.Thread(target=download_task)
+            thread.start()
+
+            progress_generator = progress_hook({'status': 'downloading'})
+            while thread.is_alive():
+                try:
+                    update = next(progress_generator)
+                    yield update
+                except StopIteration:
+                    break
+                time.sleep(0.1)
+
+            thread.join()
+            time.sleep(1)  # Ensure the file is fully written
+            if os.path.exists(save_path):
+                yield json.dumps({'status': 'Download completed', 'filename': current_filename}) + '\n'
+            else:
+                yield json.dumps({'error': 'File was not created on the server'}) + '\n'
     except Exception as e:
-        root.after(0, lambda: messagebox.showerror("Error", f"Download failed: {str(e)}"))
-        root.after(0, lambda: status_label.config(text="Download failed"))
-        root.after(0, lambda: retry_button.config(state=NORMAL))
-    finally:
-        root.after(0, lambda: download_button.config(text="Download", state=NORMAL))
-        root.after(0, lambda: progress_bar.config(value=0))
+        yield json.dumps({'error': f'Download failed: {str(e)}'}) + '\n'
 
-# Function to handle the download process
-def download_video():
+# Route to handle download
+@app.route('/download', methods=['POST'])
+def download():
     global video_info
-    if video_info is None:
-        messagebox.showerror("Error", "Please load a video first")
-        return
-    resolution = resolution_var.get()
-    format_type = format_var.get()
-    if not resolution and format_type == "MP4":
-        messagebox.showerror("Error", "Please select a resolution")
-        return
-    save_path = filedialog.asksaveasfilename(
-        defaultextension=f".{format_type.lower()}",
-        filetypes=[(f"{format_type} files", f"*.{format_type.lower()}")],
-        initialfile=video_info.get('title', 'video')
-    )
-    if save_path:
-        download_button.config(text="Downloading...", state=DISABLED)
-        retry_button.config(state=DISABLED)
-        progress_bar['value'] = 0  # Reset progress bar
-        threading.Thread(target=perform_download, args=(resolution, save_path, format_type), daemon=True).start()
+    if not video_info:
+        return Response(json.dumps({'error': 'Please load a video first'}) + '\n', content_type='text/event-stream')
 
-# Start the main loop
-root.mainloop()
+    data = request.get_json(force=True)
+    format_type = data.get('format')
+    resolution = data.get('resolution')
+    if not resolution and format_type == 'MP4':
+        return Response(json.dumps({'error': 'Please select a resolution'}) + '\n', content_type='text/event-stream')
+
+    return Response(stream_with_context(download_generator(video_info, format_type, resolution)), content_type='text/event-stream')
+
+# Route to serve downloaded files
+@app.route('/download_file/<filename>')
+def download_file(filename):
+    try:
+        # Log the request details
+        app.logger.info(f"Attempting to serve file: {filename}")
+        app.logger.info(f"Download path: {download_path}")
+        full_path = os.path.join(download_path, filename)
+        app.logger.info(f"Full file path: {full_path}")
+        
+        # Check if the file exists
+        if not os.path.exists(full_path):
+            app.logger.error(f"File does not exist: {full_path}")
+            return jsonify({'error': f'File not found: {filename}'}), 404
+
+        # Serve the file
+        response = send_from_directory(download_path, filename, as_attachment=True)
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Log successful serving
+        app.logger.info(f"File served successfully: {filename}")
+        
+        # Delete the file after serving
+        try:
+            time.sleep(0.5)  # Ensure the file is fully sent
+            os.remove(full_path)
+            app.logger.info(f"File deleted successfully: {filename}")
+        except Exception as delete_error:
+            app.logger.error(f"Failed to delete file {filename}: {str(delete_error)}")
+        
+        return response
+    except Exception as e:
+        app.logger.error(f"Error serving file {filename}: {str(e)}")
+        return jsonify({'error': f'Error serving file: {str(e)}'}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
